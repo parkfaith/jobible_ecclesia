@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+body {
+  background: #f8fafc;
+  color: #1e293b;
+  font-family: "Pretendard", "Apple SD Gothic Neo", Arial, sans-serif;
+}
