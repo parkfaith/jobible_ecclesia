@@ -97,8 +97,20 @@ class MeetingTranscriptOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MeetingMinutesOut(BaseModel):
+    id: int
+    meeting_id: int
+    content_json: str
+    docx_path: str
+    version: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MeetingDetail(MeetingOut):
     team: TeamOut
     template: Optional[TemplateOut] = None
     files: List[MeetingFileOut] = Field(default_factory=list)
     transcript: Optional[MeetingTranscriptOut] = None
+    minutes: List[MeetingMinutesOut] = Field(default_factory=list)

@@ -7,6 +7,7 @@ import {
   meetingsApi,
   MeetingDetail,
   MeetingFile,
+  MeetingMinutes,
   MeetingTranscript,
   STATUS_COLOR,
   STATUS_LABEL,
@@ -26,6 +27,7 @@ export default function MeetingDetailPage() {
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [files, setFiles] = useState<MeetingFile[]>([]);
   const [transcript, setTranscript] = useState<MeetingTranscript | null>(null);
+  const [minutes, setMinutes] = useState<MeetingMinutes[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -37,6 +39,7 @@ export default function MeetingDetailPage() {
     setMeeting(data);
     setFiles(sortedFiles);
     setTranscript(data.transcript ?? null);
+    setMinutes([...(data.minutes ?? [])].sort((a, b) => b.version - a.version));
   }, [meetingId]);
 
   useEffect(() => {
@@ -102,6 +105,17 @@ export default function MeetingDetailPage() {
       await loadMeeting();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Transcript 재생성 실패");
+    }
+  };
+
+  const handleGenerateMinutesDraft = async () => {
+    setError("");
+    try {
+      const draft = await meetingsApi.generateMinutesDraft(meetingId);
+      setMinutes((current) => [draft, ...current].sort((a, b) => b.version - a.version));
+      await loadMeeting();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "회의록 초안 생성 실패");
     }
   };
 
@@ -303,12 +317,26 @@ export default function MeetingDetailPage() {
         </div>
 
         <div>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            회의록
-          </h3>
-          <div className="bg-slate-50 rounded-lg p-4 text-center text-sm text-slate-400">
-            Phase 3~5에서 화자 분리, 회의록 생성, Word 파일 출력을 구현할 예정입니다.
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              회의록
+            </h3>
+            <button
+              onClick={handleGenerateMinutesDraft}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              초안 생성
+            </button>
           </div>
+          {minutes.length === 0 ? (
+            <div className="bg-slate-50 rounded-lg p-4 text-center text-sm text-slate-400">
+              아직 생성된 회의록 초안이 없습니다.
+            </div>
+          ) : (
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              {JSON.stringify(JSON.parse(minutes[0].content_json), null, 2)}
+            </pre>
+          )}
         </div>
       </div>
     </div>

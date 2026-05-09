@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional
 from database import SessionLocal, get_db
+from agents.minutes_agent import build_minutes_input, generate_minutes_draft
 from agents.stt_agent import transcribe_audio
 import models
 import schemas
@@ -181,6 +182,7 @@ def get_meeting(meeting_id: int, db: Session = Depends(get_db)):
             joinedload(models.Meeting.template),
             joinedload(models.Meeting.files),
             joinedload(models.Meeting.transcript),
+            joinedload(models.Meeting.minutes),
         )
         .filter(models.Meeting.id == meeting_id)
         .first()
@@ -261,6 +263,60 @@ def rebuild_meeting_transcript(meeting_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(transcript)
     return transcript
+
+
+@router.get("/{meeting_id}/minutes", response_model=list[schemas.MeetingMinutesOut])
+def list_meeting_minutes(meeting_id: int, db: Session = Depends(get_db)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="회의를 찾을 수 없습니다.")
+    return (
+        db.query(models.MeetingMinutes)
+        .filter(models.MeetingMinutes.meeting_id == meeting_id)
+        .order_by(models.MeetingMinutes.version.desc(), models.MeetingMinutes.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{meeting_id}/minutes/draft", response_model=schemas.MeetingMinutesOut)
+def generate_meeting_minutes_draft(meeting_id: int, db: Session = Depends(get_db)):
+    meeting = (
+        db.query(models.Meeting)
+        .options(joinedload(models.Meeting.team), joinedload(models.Meeting.transcript))
+        .filter(models.Meeting.id == meeting_id)
+        .first()
+    )
+    if not meeting:
+        raise HTTPException(status_code=404, detail="회의를 찾을 수 없습니다.")
+
+    transcript = meeting.transcript or build_meeting_transcript(db, meeting_id)
+    if transcript.status != "ready":
+        raise HTTPException(status_code=400, detail="통합 transcript가 준비되지 않았습니다.")
+
+    minutes_input = build_minutes_input(meeting, transcript)
+    draft = generate_minutes_draft(minutes_input)
+    payload = {
+        "input": minutes_input,
+        "draft": draft,
+    }
+
+    last_minutes = (
+        db.query(models.MeetingMinutes)
+        .filter(models.MeetingMinutes.meeting_id == meeting_id)
+        .order_by(models.MeetingMinutes.version.desc())
+        .first()
+    )
+    next_version = (last_minutes.version if last_minutes else 0) + 1
+    minutes = models.MeetingMinutes(
+        meeting_id=meeting_id,
+        content_json=json.dumps(payload, ensure_ascii=False),
+        version=next_version,
+    )
+    db.add(minutes)
+    meeting.status = "review"
+    db.commit()
+    db.refresh(minutes)
+    return minutes
 
 
 @router.post("/{meeting_id}/files", response_model=list[schemas.MeetingFileOut], status_code=201)

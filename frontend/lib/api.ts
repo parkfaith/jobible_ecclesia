@@ -62,11 +62,21 @@ export interface MeetingTranscript {
   updated_at: string;
 }
 
+export interface MeetingMinutes {
+  id: number;
+  meeting_id: number;
+  content_json: string;
+  docx_path: string;
+  version: number;
+  created_at: string;
+}
+
 export interface MeetingDetail extends Meeting {
   team: Team;
   template: Template | null;
   files: MeetingFile[];
   transcript: MeetingTranscript | null;
+  minutes: MeetingMinutes[];
 }
 
 // ── Teams ──────────────────────────────────────────────
@@ -119,6 +129,9 @@ export const meetingsApi = {
   transcript: (id: number) => request<MeetingTranscript>(`/meetings/${id}/transcript`),
   rebuildTranscript: (id: number) =>
     request<MeetingTranscript>(`/meetings/${id}/transcript/build`, { method: "POST" }),
+  minutes: (id: number) => request<MeetingMinutes[]>(`/meetings/${id}/minutes`),
+  generateMinutesDraft: (id: number) =>
+    request<MeetingMinutes>(`/meetings/${id}/minutes/draft`, { method: "POST" }),
 };
 
 // ── Templates ──────────────────────────────────────────
