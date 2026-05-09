@@ -65,6 +65,19 @@ class MeetingOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MeetingFileOut(BaseModel):
+    id: int
+    meeting_id: int
+    file_order: int
+    audio_path: str
+    stt_transcript: str
+    stt_status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MeetingDetail(MeetingOut):
     team: TeamOut
     template: Optional[TemplateOut] = None
+    files: List[MeetingFileOut] = Field(default_factory=list)
