@@ -7,6 +7,7 @@ import {
   meetingsApi,
   MeetingDetail,
   MeetingFile,
+  MeetingTranscript,
   STATUS_COLOR,
   STATUS_LABEL,
   STT_STATUS_COLOR,
@@ -24,6 +25,7 @@ export default function MeetingDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [files, setFiles] = useState<MeetingFile[]>([]);
+  const [transcript, setTranscript] = useState<MeetingTranscript | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -34,6 +36,7 @@ export default function MeetingDetailPage() {
     const sortedFiles = [...(data.files ?? [])].sort((a, b) => a.file_order - b.file_order);
     setMeeting(data);
     setFiles(sortedFiles);
+    setTranscript(data.transcript ?? null);
   }, [meetingId]);
 
   useEffect(() => {
@@ -88,6 +91,17 @@ export default function MeetingDetailPage() {
       await loadMeeting();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "STT 재처리 요청 실패");
+    }
+  };
+
+  const handleRebuildTranscript = async () => {
+    setError("");
+    try {
+      const rebuilt = await meetingsApi.rebuildTranscript(meetingId);
+      setTranscript(rebuilt);
+      await loadMeeting();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Transcript 재생성 실패");
     }
   };
 
@@ -258,6 +272,33 @@ export default function MeetingDetailPage() {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 pt-5">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              통합 Transcript
+            </h3>
+            <button
+              onClick={handleRebuildTranscript}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              재생성
+            </button>
+          </div>
+          {!transcript ? (
+            <div className="bg-slate-50 rounded-lg p-4 text-center text-sm text-slate-400">
+              아직 생성된 통합 transcript가 없습니다.
+            </div>
+          ) : transcript.status !== "ready" ? (
+            <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+              상태: {transcript.status} / 반영된 파일 수: {transcript.source_file_count}
+            </div>
+          ) : (
+            <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              {transcript.content_text}
+            </pre>
           )}
         </div>
 

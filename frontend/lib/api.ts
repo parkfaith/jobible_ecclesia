@@ -51,10 +51,22 @@ export interface MeetingFile {
   created_at: string;
 }
 
+export interface MeetingTranscript {
+  id: number;
+  meeting_id: number;
+  content_text: string;
+  content_json: string;
+  source_file_count: number;
+  status: "pending" | "ready" | "blocked";
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MeetingDetail extends Meeting {
   team: Team;
   template: Template | null;
   files: MeetingFile[];
+  transcript: MeetingTranscript | null;
 }
 
 // ── Teams ──────────────────────────────────────────────
@@ -104,6 +116,9 @@ export const meetingsApi = {
   },
   retryStt: (meetingId: number, fileId: number) =>
     request<MeetingFile>(`/meetings/${meetingId}/files/${fileId}/stt`, { method: "POST" }),
+  transcript: (id: number) => request<MeetingTranscript>(`/meetings/${id}/transcript`),
+  rebuildTranscript: (id: number) =>
+    request<MeetingTranscript>(`/meetings/${id}/transcript/build`, { method: "POST" }),
 };
 
 // ── Templates ──────────────────────────────────────────

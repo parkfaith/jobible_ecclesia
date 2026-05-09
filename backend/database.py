@@ -20,5 +20,5 @@ def get_db():
 
 
 def init_db():
-    from models import Team, Template, Meeting, MeetingFile, MeetingMinutes, ActionItem  # noqa
+    from models import Team, Template, Meeting, MeetingFile, MeetingTranscript, MeetingMinutes, ActionItem  # noqa
     Base.metadata.create_all(bind=engine)

@@ -77,7 +77,28 @@ class MeetingFileOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TranscriptSegment(BaseModel):
+    file_id: int
+    file_order: int
+    file_name: str
+    transcript: str
+
+
+class MeetingTranscriptOut(BaseModel):
+    id: int
+    meeting_id: int
+    content_text: str
+    content_json: str
+    source_file_count: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MeetingDetail(MeetingOut):
     team: TeamOut
     template: Optional[TemplateOut] = None
     files: List[MeetingFileOut] = Field(default_factory=list)
+    transcript: Optional[MeetingTranscriptOut] = None

@@ -29,6 +29,14 @@ def _safe_audio_filename(filename: str) -> str:
     return f"{uuid.uuid4().hex}_{stem}{ext}"
 
 
+def _display_audio_filename(audio_path: str) -> str:
+    name = Path(audio_path).name
+    parts = name.split("_", 1)
+    if len(parts) == 2 and len(parts[0]) == 32:
+        return parts[1]
+    return name
+
+
 def _sync_meeting_status(db: Session, meeting_id: int):
     files = db.query(models.MeetingFile).filter(models.MeetingFile.meeting_id == meeting_id).all()
     meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
@@ -41,6 +49,66 @@ def _sync_meeting_status(db: Session, meeting_id: int):
         meeting.status = "review"
     else:
         meeting.status = "pending"
+
+
+def build_meeting_transcript(db: Session, meeting_id: int) -> models.MeetingTranscript:
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="회의를 찾을 수 없습니다.")
+
+    files = (
+        db.query(models.MeetingFile)
+        .filter(models.MeetingFile.meeting_id == meeting_id)
+        .order_by(models.MeetingFile.file_order.asc(), models.MeetingFile.created_at.asc())
+        .all()
+    )
+    done_files = [f for f in files if f.stt_status == "done" and f.stt_transcript.strip()]
+    blocking_files = [f for f in files if f.stt_status in {"pending", "processing"}]
+
+    transcript = (
+        db.query(models.MeetingTranscript)
+        .filter(models.MeetingTranscript.meeting_id == meeting_id)
+        .first()
+    )
+    if not transcript:
+        transcript = models.MeetingTranscript(meeting_id=meeting_id)
+        db.add(transcript)
+
+    if blocking_files or not done_files:
+        transcript.status = "blocked"
+        transcript.source_file_count = len(done_files)
+        transcript.content_text = ""
+        transcript.content_json = json.dumps(
+            {
+                "segments": [],
+                "blocked_file_ids": [f.id for f in blocking_files],
+                "error_file_ids": [f.id for f in files if f.stt_status == "error"],
+            },
+            ensure_ascii=False,
+        )
+        db.flush()
+        return transcript
+
+    segments = [
+        {
+            "file_id": f.id,
+            "file_order": f.file_order,
+            "file_name": _display_audio_filename(f.audio_path),
+            "transcript": f.stt_transcript.strip(),
+        }
+        for f in done_files
+    ]
+    content_text = "\n\n".join(
+        f"[파일 {segment['file_order']}: {segment['file_name']}]\n{segment['transcript']}"
+        for segment in segments
+    )
+
+    transcript.status = "ready"
+    transcript.source_file_count = len(done_files)
+    transcript.content_text = content_text
+    transcript.content_json = json.dumps({"segments": segments}, ensure_ascii=False)
+    db.flush()
+    return transcript
 
 
 def process_stt_file(file_id: int):
@@ -64,6 +132,8 @@ def process_stt_file(file_id: int):
             meeting_file.stt_transcript = transcript
 
         _sync_meeting_status(db, meeting_file.meeting_id)
+        if meeting_file.stt_status == "done":
+            build_meeting_transcript(db, meeting_file.meeting_id)
         db.commit()
     finally:
         db.close()
@@ -110,6 +180,7 @@ def get_meeting(meeting_id: int, db: Session = Depends(get_db)):
             joinedload(models.Meeting.team),
             joinedload(models.Meeting.template),
             joinedload(models.Meeting.files),
+            joinedload(models.Meeting.transcript),
         )
         .filter(models.Meeting.id == meeting_id)
         .first()
@@ -165,6 +236,31 @@ def list_meeting_files(meeting_id: int, db: Session = Depends(get_db)):
         .order_by(models.MeetingFile.file_order.asc(), models.MeetingFile.created_at.asc())
         .all()
     )
+
+
+@router.get("/{meeting_id}/transcript", response_model=schemas.MeetingTranscriptOut)
+def get_meeting_transcript(meeting_id: int, db: Session = Depends(get_db)):
+    meeting = db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="회의를 찾을 수 없습니다.")
+    transcript = (
+        db.query(models.MeetingTranscript)
+        .filter(models.MeetingTranscript.meeting_id == meeting_id)
+        .first()
+    )
+    if not transcript:
+        transcript = build_meeting_transcript(db, meeting_id)
+        db.commit()
+        db.refresh(transcript)
+    return transcript
+
+
+@router.post("/{meeting_id}/transcript/build", response_model=schemas.MeetingTranscriptOut)
+def rebuild_meeting_transcript(meeting_id: int, db: Session = Depends(get_db)):
+    transcript = build_meeting_transcript(db, meeting_id)
+    db.commit()
+    db.refresh(transcript)
+    return transcript
 
 
 @router.post("/{meeting_id}/files", response_model=list[schemas.MeetingFileOut], status_code=201)

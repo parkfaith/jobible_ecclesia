@@ -42,6 +42,7 @@ class Meeting(Base):
     team = relationship("Team", back_populates="meetings")
     template = relationship("Template", back_populates="meetings")
     files = relationship("MeetingFile", back_populates="meeting", cascade="all, delete-orphan")
+    transcript = relationship("MeetingTranscript", back_populates="meeting", cascade="all, delete-orphan", uselist=False)
     minutes = relationship("MeetingMinutes", back_populates="meeting", cascade="all, delete-orphan")
     action_items = relationship("ActionItem", back_populates="meeting", cascade="all, delete-orphan")
 
@@ -58,6 +59,21 @@ class MeetingFile(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     meeting = relationship("Meeting", back_populates="files")
+
+
+class MeetingTranscript(Base):
+    __tablename__ = "meeting_transcripts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=False, unique=True)
+    content_text = Column(Text, default="")
+    content_json = Column(Text, default="{}")
+    source_file_count = Column(Integer, default=0)
+    status = Column(String(20), default="pending")  # pending|ready|blocked
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    meeting = relationship("Meeting", back_populates="transcript")
 
 
 class MeetingMinutes(Base):
